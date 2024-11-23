@@ -1,0 +1,128 @@
+MODULE memory_module(bus_req_L1)
+	VAR
+		data : array 0..1 of boolean;
+		state : {IDLE, BUSY, RESPONSE};
+
+	DEFINE
+		busy := state = BUSY;
+
+	ASSIGN
+		init(data[0]) := FALSE;
+		init(data[1]) := FALSE;
+		init(state) := IDLE;
+
+		next(state) := case
+			bus_req_L1 & !busy : BUSY;
+			state = BUSY : {RESPONSE};
+			state = RESPONSE : IDLE;
+			TRUE : state;
+		esac;
+
+		next(data[0]) := case
+			TRUE : data[0];
+		esac;
+		next(data[1]) := case
+			TRUE : data[1];
+		esac;
+
+-- end of memory_module
+
+MODULE cpu_module(cache_busy)
+	VAR
+		mem_request : {IDLE, CPU_READ};
+
+	ASSIGN
+		init(mem_request) := IDLE;
+		next(mem_request) := case
+			mem_request = IDLE & !cache_busy : CPU_READ;
+			mem_request != IDLE & !cache_busy : IDLE;
+			TRUE : mem_request;
+		esac;
+
+-- end of cpu_module
+
+MODULE arbiter_module(req_L1_1, mem_busy, mem_response)
+	VAR
+		state : {MEM, L1_1};
+
+	DEFINE
+		valid := state = L1_1 | (state = MEM & mem_response);
+
+	ASSIGN
+		init(state) := MEM;
+		next(state) := case
+			state = MEM & req_L1_1 & !mem_busy : L1_1;
+			state = L1_1 : MEM;
+			TRUE : state;
+		esac;
+
+-- end of arbiter_module
+
+MODULE bus_module()
+	VAR
+		data : boolean;
+		address : boolean;
+
+	ASSIGN
+		init(data) := FALSE;
+		init(address) := FALSE;
+
+		next(data) := case
+			TRUE : data;
+		esac;
+		next(address) := case
+			TRUE : address;
+		esac;
+
+-- end of bus_module
+
+MODULE cache_module(cpu_request, arbiter_mem, arbiter_valid)
+	VAR
+		state : {IDLE, L1_READ};
+
+	DEFINE
+		requesting := state = L1_READ;
+		data_ready := arbiter_mem & arbiter_valid;
+		busy := (cpu_request = CPU_READ) & !data_ready;
+
+	ASSIGN
+		init(state) := IDLE;
+		next(state) := case
+			state = IDLE & cpu_request = CPU_READ : L1_READ;
+			state = L1_READ & data_ready : IDLE;
+			TRUE : state;
+		esac;
+
+-- end of cache_module
+
+MODULE main
+	VAR
+		memory : memory_module(arbiter.state = L1_1);
+		cpu : cpu_module(cache.busy);
+		arbiter : arbiter_module(cache.requesting, memory.busy, memory.state = RESPONSE);
+		bus : bus_module();
+		cache : cache_module(cpu.mem_request, arbiter.state = MEM, arbiter.valid);
+
+
+SPEC AG (memory.busy -> AF(memory.state = RESPONSE));
+
+SPEC AG (AF(cpu.mem_request = CPU_READ));
+SPEC AG (AF(cpu.mem_request = IDLE));
+
+SPEC AG (cpu.mem_request = CPU_READ -> AF(cpu.mem_request = IDLE))
+SPEC AG (cpu.mem_request = CPU_READ -> AF(cache.busy));
+SPEC AG (cpu.mem_request = CPU_READ -> AF(memory.busy));
+SPEC AG (cpu.mem_request = CPU_READ -> AF(cache.data_ready));
+SPEC AG (cpu.mem_request = CPU_READ -> AF(arbiter.state = L1_1));
+
+SPEC AG (AF(arbiter.state = L1_1));
+SPEC AG (AF(arbiter.state = MEM));
+
+SPEC AG (arbiter.state = L1_1 -> arbiter.valid);
+SPEC AG (arbiter.state = MEM & memory.state = RESPONSE -> arbiter.valid);
+SPEC AG (AF(arbiter.state = MEM & memory.state = BUSY));
+SPEC AG (AF(arbiter.state = MEM & memory.state = RESPONSE));
+
+SPEC AG (cache.requesting -> AF(cache.busy -> AF(cache.data_ready)));
+SPEC AG (arbiter.state = MEM & arbiter.valid -> AX(!cache.requesting));
+
