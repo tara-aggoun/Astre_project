@@ -1,6 +1,8 @@
-MODULE memory_module(b_in_L1)
+MODULE memory_module(b_in_L1, bus)
 	VAR
 		state : {IDLE, READY};
+		data : array 0..1 of {0, 1, ACK};
+		out : {0, 1, ACK};
 
 	ASSIGN
 		init(state) := IDLE;
@@ -10,14 +12,32 @@ MODULE memory_module(b_in_L1)
 			TRUE : state;
 		esac;
 
+		init(data[0]) := 0;
+		init(data[1]) := 0;
+		next(data[0]) := case
+			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE : bus.data;
+			TRUE : data[0];
+		esac;
+		next(data[1]) := case
+			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE : bus.data;
+			TRUE : data[1];
+		esac;
+
+		init(out) := 0;
+		next(out) := case
+			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_READ : data[0];
+			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_READ : data[1];
+			b_in_L1 & bus.ctrl = BUS_WRITE : ACK;
+			TRUE : out;
+		esac;
 
 -- end of memory_module
 
 MODULE cpu_module(L1_req, L1_rsp)
 	VAR
 		req: {NONE, CPU_READ, CPU_WRITE};
-		address : boolean;
-		data : boolean;
+		address : {0, 1};
+		data : {0, 1, ACK};
 
 	DEFINE
 		busy := (req = NONE & !L1_req) | (L1_rsp);
@@ -28,12 +48,16 @@ MODULE cpu_module(L1_req, L1_rsp)
 			busy : {NONE, CPU_READ, CPU_WRITE};
 			TRUE : req;
 		esac;
+
+		init(address) := 0;
 		next(address) := case
-			busy : {TRUE, FALSE};
+			busy : {0, 1};
 			TRUE : address;
 		esac;
+
+		init(data) := 0;
 		next(data) := case
-			busy : {TRUE, FALSE};
+			busy : {0, 1};
 			TRUE : data;
 		esac;
 
@@ -57,25 +81,26 @@ MODULE arbiter_module(L1_req, mem_ready)
 
 -- end of arbiter_module
 
-MODULE bus_module(arb_gnt, cpu)
+MODULE bus_module(arb_gnt, cpu, mem_out)
 	VAR
-		address : boolean;
-		data : boolean;
+		address : {0, 1};
+		data : {0, 1, ACK};
 		ctrl : {BUS_READ, BUS_WRITE};
 
 	ASSIGN
+		data := case
+			arb_gnt = MEM : mem_out;
+			arb_gnt = L1_1 : cpu.data;
+			TRUE : 0;
+		esac;
 		ctrl := case
 			arb_gnt = L1_1 & cpu.req = CPU_READ : BUS_READ;
 			arb_gnt = L1_1 & cpu.req = CPU_WRITE : BUS_WRITE;
 			TRUE : BUS_READ;
 		esac;
-		data := case
-			arb_gnt = L1_1 : cpu.data;
-			TRUE : FALSE;
-		esac;
 		address := case
 			arb_gnt = L1_1 : cpu.address;
-			TRUE : FALSE;
+			TRUE : 0;
 		esac;
 
 -- end of bus_module
@@ -90,10 +115,10 @@ MODULE cache_module(cpu_req, mem_ready, prev_mem_ready)
 MODULE main
 	VAR
 		prev_mem_ready : boolean;
-		memory : memory_module(arbiter.gnt = L1_1);
+		memory : memory_module(arbiter.gnt = L1_1, bus);
 		cpu : cpu_module(L1.req, L1.rsp);
 		arbiter : arbiter_module(L1.req, memory.state = READY);
-		bus : bus_module(arbiter.gnt, cpu);
+		bus : bus_module(arbiter.gnt, cpu, memory.out);
 		L1 : cache_module(cpu.req, memory.state = READY, prev_mem_ready);
 
 	ASSIGN
