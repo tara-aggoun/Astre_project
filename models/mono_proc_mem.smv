@@ -40,7 +40,7 @@ MODULE cpu_module(L1_req, L1_rsp)
 		data : {0, 1, ACK};
 
 	DEFINE
-		busy := (req = NONE & !L1_req) | (L1_rsp);
+		busy := (req = NONE & !L1_req) | L1_rsp;
 
 	ASSIGN
 		init(req) := NONE;
@@ -81,7 +81,7 @@ MODULE arbiter_module(L1_req, mem_ready)
 
 -- end of arbiter_module
 
-MODULE bus_module(arb_gnt, cpu, mem_out)
+MODULE bus_module(arb_gnt, L1, mem_out)
 	VAR
 		address : {0, 1};
 		data : {0, 1, ACK};
@@ -90,35 +90,54 @@ MODULE bus_module(arb_gnt, cpu, mem_out)
 	ASSIGN
 		data := case
 			arb_gnt = MEM : mem_out;
-			arb_gnt = L1_1 : cpu.data;
+			arb_gnt = L1_1 : L1.data;
 			TRUE : 0;
 		esac;
 		ctrl := case
-			arb_gnt = L1_1 & cpu.req = CPU_READ : BUS_READ;
-			arb_gnt = L1_1 & cpu.req = CPU_WRITE : BUS_WRITE;
+			arb_gnt = L1_1 & L1.state = L1_READ : BUS_READ;
+			arb_gnt = L1_1 & L1.state = L1_WRITE : BUS_WRITE;
 			TRUE : BUS_READ;
 		esac;
 		address := case
-			arb_gnt = L1_1 : cpu.address;
+			arb_gnt = L1_1 : L1.address;
 			TRUE : 0;
 		esac;
 
 -- end of bus_module
 
-MODULE cache_module(cpu_req, bus_out, mem_ready, prev_mem_ready)
+MODULE cache_module(cpu, bus_out, mem_ready, prev_mem_ready)
 	VAR
 		rsp : {NONE, 0, 1, ACK};
+		state : {IDLE, L1_READ, L1_WRITE};
+		address : {0, 1};
+		data : {0, 1, ACK};
 
 	DEFINE
-		req := (cpu_req = CPU_READ | cpu_req = CPU_WRITE) & !prev_mem_ready;
+		req := ((cpu.req != NONE) | (state != IDLE)) & !prev_mem_ready;
 
 	ASSIGN
+		next(state) := case
+			state = IDLE & cpu.req = CPU_READ : L1_READ;
+			state = IDLE & cpu.req = CPU_WRITE : L1_WRITE;
+			state != IDLE & prev_mem_ready : IDLE;
+			TRUE : state;
+		esac;
+		next(address) := case
+			state = IDLE & cpu.req != NONE : cpu.address;
+			TRUE : address;
+		esac;
+		next(data) := case
+			state = IDLE & cpu.req != NONE : cpu.data;
+			TRUE : data;
+		esac;
+
 		rsp := case
 			mem_ready & bus_out = 0 : 0;
 			mem_ready & bus_out = 1 : 1;
 			mem_ready & bus_out = ACK : ACK;
 			TRUE : NONE;
 		esac;
+
 
 -- end of cache_module
 
@@ -128,8 +147,8 @@ MODULE main
 		memory : memory_module(arbiter.gnt = L1_1, bus);
 		cpu : cpu_module(L1.req, L1.rsp != NONE);
 		arbiter : arbiter_module(L1.req, memory.state = READY);
-		bus : bus_module(arbiter.gnt, cpu, memory.out);
-		L1 : cache_module(cpu.req, bus.data, memory.state = READY, 
+		bus : bus_module(arbiter.gnt, L1, memory.out);
+		L1 : cache_module(cpu, bus.data, memory.state = READY, 
 						  prev_mem_ready);
 
 	ASSIGN
