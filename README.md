@@ -6,16 +6,23 @@ Studies of different programs execution with bus / L1 cache / CPU / Memory / Arb
 
 ## Modelisation with Nusmv
 
+The current models are:
+- mono_proc_simple.smv: architecture with 1 cache / cpu, without memorization, the cache only forward the cpu requests.
+- mono_proc_mem.smv: same architecture as before, but with memorization in the L1 cache.
+
+### Testing the models
+
 Running the specifications:
 
 ```bash
-nusmv models/mono_proc.smv # mono processor
+nusmv models/mono_proc_simple.smv # mono processor without memorization
+nusmv models/mono_proc_mem.smv # mono processor with memorization
 ```
 
-### Interactive mode
+#### Interactive mode
 
 ```bash
-nusmv -int models/mono_proc.smv
+nusmv -int models/mono_proc_simple.smv
 # start interactive mode
 # command can be run interactively with -i instead of -r
 go

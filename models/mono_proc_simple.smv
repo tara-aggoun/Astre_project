@@ -1,0 +1,137 @@
+MODULE memory_module(b_in_L1, bus)
+	VAR
+		state : {IDLE, READY};
+		data : array 0..1 of {0, 1, ACK};
+		out : {0, 1, ACK};
+
+	ASSIGN
+		init(state) := IDLE;
+		next(state) := case
+			state = IDLE & b_in_L1 : READY;
+			state = READY : IDLE;
+			TRUE : state;
+		esac;
+
+		init(data[0]) := 0;
+		init(data[1]) := 0;
+		next(data[0]) := case
+			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE : bus.data;
+			TRUE : data[0];
+		esac;
+		next(data[1]) := case
+			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE : bus.data;
+			TRUE : data[1];
+		esac;
+
+		init(out) := 0;
+		next(out) := case
+			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_READ : data[0];
+			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_READ : data[1];
+			b_in_L1 & bus.ctrl = BUS_WRITE : ACK;
+			TRUE : out;
+		esac;
+
+-- end of memory_module
+
+MODULE cpu_module(L1_req, L1_rsp)
+	VAR
+		req: {NONE, CPU_READ, CPU_WRITE};
+		address : {0, 1};
+		data : {0, 1, ACK};
+
+	DEFINE
+		busy := (req = NONE & !L1_req) | (L1_rsp);
+
+	ASSIGN
+		init(req) := NONE;
+		next(req) := case
+			busy : {NONE, CPU_READ, CPU_WRITE};
+			TRUE : req;
+		esac;
+
+		init(address) := 0;
+		next(address) := case
+			busy : {0, 1};
+			TRUE : address;
+		esac;
+
+		init(data) := 0;
+		next(data) := case
+			busy : {0, 1};
+			TRUE : data;
+		esac;
+
+-- end of cpu_module
+
+MODULE arbiter_module(L1_req, mem_ready)
+	VAR
+		gnt : {MEM, L1_1};
+
+	DEFINE
+		valid := (gnt = MEM & L1_req & !mem_ready) 
+				 | (gnt = MEM & mem_ready);
+
+	ASSIGN
+		init(gnt) := MEM;
+		next(gnt) := case
+			gnt = MEM & L1_req & !mem_ready : L1_1;
+			gnt  = L1_1 : MEM;
+			TRUE : gnt;
+		esac;
+
+-- end of arbiter_module
+
+MODULE bus_module(arb_gnt, cpu, mem_out)
+	VAR
+		address : {0, 1};
+		data : {0, 1, ACK};
+		ctrl : {BUS_READ, BUS_WRITE};
+
+	ASSIGN
+		data := case
+			arb_gnt = MEM : mem_out;
+			arb_gnt = L1_1 : cpu.data;
+			TRUE : 0;
+		esac;
+		ctrl := case
+			arb_gnt = L1_1 & cpu.req = CPU_READ : BUS_READ;
+			arb_gnt = L1_1 & cpu.req = CPU_WRITE : BUS_WRITE;
+			TRUE : BUS_READ;
+		esac;
+		address := case
+			arb_gnt = L1_1 : cpu.address;
+			TRUE : 0;
+		esac;
+
+-- end of bus_module
+
+MODULE cache_module(cpu_req, bus_out, mem_ready, prev_mem_ready)
+	VAR
+		rsp : {NONE, 0, 1, ACK};
+
+	DEFINE
+		req := (cpu_req = CPU_READ | cpu_req = CPU_WRITE) & !prev_mem_ready;
+
+	ASSIGN
+		rsp := case
+			mem_ready & bus_out = 0 : 0;
+			mem_ready & bus_out = 1 : 1;
+			mem_ready & bus_out = ACK : ACK;
+			TRUE : NONE;
+		esac;
+
+-- end of cache_module
+
+MODULE main
+	VAR
+		prev_mem_ready : boolean;
+		memory : memory_module(arbiter.gnt = L1_1, bus);
+		cpu : cpu_module(L1.req, L1.rsp != NONE);
+		arbiter : arbiter_module(L1.req, memory.state = READY);
+		bus : bus_module(arbiter.gnt, cpu, memory.out);
+		L1 : cache_module(cpu.req, bus.data, memory.state = READY, 
+						  prev_mem_ready);
+
+	ASSIGN
+		init(prev_mem_ready) := memory.state = READY;
+		next(prev_mem_ready) := memory.state = READY;
