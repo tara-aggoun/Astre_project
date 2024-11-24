@@ -105,10 +105,20 @@ MODULE bus_module(arb_gnt, cpu, mem_out)
 
 -- end of bus_module
 
-MODULE cache_module(cpu_req, mem_ready, prev_mem_ready)
+MODULE cache_module(cpu_req, bus_out, mem_ready, prev_mem_ready)
+	VAR
+		rsp : {NONE, 0, 1, ACK};
+
 	DEFINE
-		rsp := mem_ready;
 		req := (cpu_req = CPU_READ | cpu_req = CPU_WRITE) & !prev_mem_ready;
+
+	ASSIGN
+		rsp := case
+			mem_ready & bus_out = 0 : 0;
+			mem_ready & bus_out = 1 : 1;
+			mem_ready & bus_out = ACK : ACK;
+			TRUE : NONE;
+		esac;
 
 -- end of cache_module
 
@@ -116,10 +126,11 @@ MODULE main
 	VAR
 		prev_mem_ready : boolean;
 		memory : memory_module(arbiter.gnt = L1_1, bus);
-		cpu : cpu_module(L1.req, L1.rsp);
+		cpu : cpu_module(L1.req, L1.rsp != NONE);
 		arbiter : arbiter_module(L1.req, memory.state = READY);
 		bus : bus_module(arbiter.gnt, cpu, memory.out);
-		L1 : cache_module(cpu.req, memory.state = READY, prev_mem_ready);
+		L1 : cache_module(cpu.req, bus.data, memory.state = READY, 
+						  prev_mem_ready);
 
 	ASSIGN
 		init(prev_mem_ready) := memory.state = READY;
