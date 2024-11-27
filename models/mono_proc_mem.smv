@@ -68,8 +68,7 @@ MODULE arbiter_module(L1_req, mem_ready)
 		gnt : {MEM, L1_1};
 
 	DEFINE
-		valid := (gnt = MEM & L1_req & !mem_ready) 
-				 | (gnt = MEM & mem_ready);
+		valid := (gnt = MEM & mem_ready);
 
 	ASSIGN
 		init(gnt) := MEM;
