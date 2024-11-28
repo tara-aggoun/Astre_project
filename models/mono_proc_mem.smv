@@ -200,3 +200,11 @@ SPEC AG (AX(arbiter.gnt != MEM) -> (arbiter.gnt = MEM & AX(AX(arbiter.gnt = MEM)
 SPEC AG ((arbiter.gnt = L1_1) -> (L1.address = bus.address & (L1.data = 1 -> bus.data = 1) & (L1.data = 0 -> bus.data = 0) 
 								  & (L1.state = L1_READ -> bus.ctrl = BUS_READ) & (L1.state = L1_WRITE -> bus.ctrl = BUS_WRITE)))
 SPEC AG ((arbiter.gnt = MEM & memory.valid) -> (bus.valid & (memory.out = bus.data)))
+
+-- Cache memory spec
+
+SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> AF(L1.word_address = 0))
+SPEC AG ((cpu.req = CPU_READ & cpu.address = L1.word_address & !L1.req) -> (L1.rsp = L1.word_data))
+
+SPEC AG ((cpu.req = CPU_WRITE & cpu.address = L1.word_address & cpu.data = 1 & !L1.req) -> (L1.rsp = ACK & AF(L1.word_data = 1 & L1.req)))
+SPEC AG ((cpu.req = CPU_WRITE & cpu.address != L1.word_address & !cpu.busy) -> AF(L1.state = L1_WRITE & AF(arbiter.gnt = L1_1 & AF(bus.valid & L1.rsp = ACK))))
