@@ -1,4 +1,4 @@
-MODULE memory_module(b_in_L1, bus)
+MODULE memory_module(gnt_L1, bus)
 	VAR
 		valid : boolean;
 		data : array 0..1 of {0, 1};
@@ -8,7 +8,7 @@ MODULE memory_module(b_in_L1, bus)
 	ASSIGN
 		init(valid) := FALSE;
 		next(valid) := case
-			!valid & b_in_L1 : TRUE;
+			!valid & gnt_L1 : TRUE;
 			valid : FALSE;
 			TRUE : valid;
 		esac;
@@ -16,23 +16,23 @@ MODULE memory_module(b_in_L1, bus)
 		init(data[0]) := 0;
 		init(data[1]) := 0;
 		next(data[0]) := case
-			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE & bus.data = 0 : 0;
-			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE & bus.data = 1 : 1;
+			gnt_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE & bus.data = 0 : 0;
+			gnt_L1 & bus.address = 0 & bus.ctrl = BUS_WRITE & bus.data = 1 : 1;
 			TRUE : data[0];
 		esac;
 		next(data[1]) := case
-			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE & bus.data = 0 : 0;
-			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE & bus.data = 1 : 1;
+			gnt_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE & bus.data = 0 : 0;
+			gnt_L1 & bus.address = 1 & bus.ctrl = BUS_WRITE & bus.data = 1 : 1;
 			TRUE : data[1];
 		esac;
 
 		init(out) := 0;
 		next(out) := case
-			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_READ & data[0] = 0 : 0;
-			b_in_L1 & bus.address = 0 & bus.ctrl = BUS_READ & data[0] = 1 : 1;
-			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_READ & data[1] = 0 : 0;
-			b_in_L1 & bus.address = 1 & bus.ctrl = BUS_READ & data[1] = 1 : 1;
-			b_in_L1 & bus.ctrl = BUS_WRITE : ACK;
+			gnt_L1 & bus.address = 0 & bus.ctrl = BUS_READ & data[0] = 0 : 0;
+			gnt_L1 & bus.address = 0 & bus.ctrl = BUS_READ & data[0] = 1 : 1;
+			gnt_L1 & bus.address = 1 & bus.ctrl = BUS_READ & data[1] = 0 : 0;
+			gnt_L1 & bus.address = 1 & bus.ctrl = BUS_READ & data[1] = 1 : 1;
+			gnt_L1 & bus.ctrl = BUS_WRITE : ACK;
 			TRUE : out;
 		esac;
 		next(address) := bus.address;
