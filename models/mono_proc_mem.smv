@@ -208,3 +208,8 @@ SPEC AG ((cpu.req = CPU_READ & cpu.address = L1.word_address & !L1.req) -> (L1.r
 
 SPEC AG ((cpu.req = CPU_WRITE & cpu.address = L1.word_address & cpu.data = 1 & !L1.req) -> (L1.rsp = ACK & AF(L1.word_data = 1 & L1.req)))
 SPEC AG ((cpu.req = CPU_WRITE & cpu.address != L1.word_address & !cpu.busy) -> AF(L1.state = L1_WRITE & AF(arbiter.gnt = 1 & AF(bus.valid & L1.rsp = ACK))))
+
+SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & L1.word_address = 0 & cpu.data = 1 & !L1.req) ->
+         (cpu.busy & AX((cpu.req = CPU_WRITE & cpu.address = 0 & cpu.data = 0) -> (!cpu.busy & AF(memory.data[0] = 1 & AF(memory.data[0] = 0))))))
+SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & L1.word_address = 0 & cpu.data = 1 & !L1.req) ->
+         (cpu.busy & AX((cpu.req = CPU_READ & cpu.address = 0) -> (!cpu.busy & L1.rsp = NONE & AF(L1.rsp = 1)))))
