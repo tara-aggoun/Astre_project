@@ -40,7 +40,6 @@ MODULE memory_module(gnt_L1, bus)
 MODULE cpu_module(L1_req, L1_rsp)
 	VAR
 		req: {NONE, CPU_READ, CPU_WRITE};
-		stall : boolean;
 		address : {0, 1};
 		data : {0, 1};
 
@@ -52,13 +51,6 @@ MODULE cpu_module(L1_req, L1_rsp)
 		next(req) := case
 			busy : {NONE, CPU_READ, CPU_WRITE};
 			TRUE : req;
-		esac;
-
-		init(stall) := FALSE;
-		next(stall) := case
-			req != NONE & !L1_rsp : TRUE;
-			L1_rsp : FALSE;
-			TRUE : stall;
 		esac;
 
 		init(address) := 0;
@@ -168,7 +160,7 @@ MODULE main
 
 
 SPEC AG ((cpu.req != NONE) -> AF(L1.req & AF(bus.valid & L1.rsp != NONE)))
-SPEC AG ((cpu.req != NONE & !cpu.stall) -> AF(arbiter.gnt = L1_1))
+SPEC AG ((cpu.req != NONE & !cpu.busy) -> AF(arbiter.gnt = L1_1))
 SPEC AG ((cpu.req != NONE & prev_valid) -> (!L1.req & AX(L1.req & AF(!L1.req))))
 
 SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> AF(memory.out = memory.data[0] & AF(L1.rsp = memory.data[0])))
