@@ -190,22 +190,21 @@ MODULE main
 		next(prev_valid) := bus.valid;
 
 
-SPEC AG ((cpu.req != NONE) -> AF(L1.req & AF(bus.valid & L1.rsp != NONE)))
-SPEC AG ((cpu.req != NONE & !cpu.stall) -> AF(arbiter.gnt = L1_1))
-SPEC AG ((cpu.req != NONE & prev_valid) -> (!L1.req & AX(L1.req & AF(!L1.req))))
+SPEC AG ((cpu.req != NONE) -> EF(L1.req & AF(bus.valid & L1.rsp != NONE)))
+SPEC AG ((cpu.req != NONE & !cpu.stall) -> EF(arbiter.gnt = L1_1))
+SPEC AG ((cpu.req != NONE & prev_valid) -> (!L1.req & EX(L1.req & AF(!L1.req))))
 
-SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> AF(memory.out = memory.data[0] & AF(L1.rsp = memory.data[0])))
-SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> AF(L1.state = L1_READ & L1.address = 0))
+SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> EF(memory.out = memory.data[0] & AF(L1.rsp = memory.data[0])))
+SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> EF(L1.state = L1_READ & L1.address = 0))
 
 SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & cpu.data = 1) -> AF(memory.data[0] = 1))
-SPEC AG ((cpu.req = CPU_WRITE) -> AF(memory.out = ACK & AF(L1.rsp = ACK)))
+SPEC AG ((cpu.req = CPU_WRITE) -> AF(memory.out = ACK & EF(L1.rsp = ACK)))
 SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & cpu.data = 0) -> AF(L1.state = L1_WRITE & L1.address = 0 & L1.data = 0))
-
-SPEC AG (bus.valid -> (L1.req & AX(!L1.req)))
-SPEC AG (AX(arbiter.gnt != MEM) -> (arbiter.gnt = MEM & AX(AX(arbiter.gnt = MEM))))
-
 SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & cpu.data = 1) -> AX(AF((cpu.req = CPU_READ & cpu.address = 0) -> AX(AF(L1.rsp = 1)))))
 
+SPEC AG (bus.valid -> (L1.req & AX(!L1.req)))
+
+SPEC AG (AX(arbiter.gnt != MEM) -> (arbiter.gnt = MEM & AX(AX(arbiter.gnt = MEM))))
 SPEC AG ((arbiter.gnt = L1_1) -> (L1.address = bus.address & (L1.data = 1 -> bus.data = 1) & (L1.data = 0 -> bus.data = 0) 
 								  & (L1.state = L1_READ -> bus.ctrl = BUS_READ) & (L1.state = L1_WRITE -> bus.ctrl = BUS_WRITE)))
 SPEC AG ((arbiter.gnt = MEM & memory.valid) -> (bus.valid & (memory.out = bus.data)))
