@@ -3,6 +3,7 @@ MODULE memory_module(b_in_L1, bus)
 		valid : boolean;
 		data : array 0..1 of {0, 1};
 		out : {0, 1, ACK};
+		address : {0, 1};
 
 	ASSIGN
 		init(valid) := FALSE;
@@ -34,6 +35,7 @@ MODULE memory_module(b_in_L1, bus)
 			b_in_L1 & bus.ctrl = BUS_WRITE : ACK;
 			TRUE : out;
 		esac;
+		next(address) := bus.address;
 
 -- end of memory_module
 
@@ -45,7 +47,7 @@ MODULE cpu_module(L1_req, L1_rsp)
 		data : {0, 1};
 
 	DEFINE
-		busy := (req = NONE & !stall) | L1_rsp;
+		busy := (req = NONE) | L1_rsp;
 
 	ASSIGN
 		init(req) := NONE;
@@ -110,28 +112,32 @@ MODULE bus_module(arb_gnt, L1, mem)
 			TRUE : BUS_READ;
 		esac;
 		address := case
+			arb_gnt = MEM : mem.address;
 			arb_gnt = L1_1 : L1.address;
-			TRUE : 0;
 		esac;
 
 -- end of bus_module
 
-MODULE cache_module(cpu, bus_out, valid, prev_valid)
+MODULE cache_module(cpu, bus, prev_valid)
 	VAR
 		rsp : {NONE, 0, 1, ACK};
 		state : {IDLE, L1_READ, L1_WRITE};
 		address : {0, 1};
 		data : {0, 1};
+		word_address : {NONE, 0, 1};
+		word_data : {0, 1};
 
 	DEFINE
-		req := ((cpu.req != NONE) | (state != IDLE)) & !prev_valid;
+		req := ((cpu.req = CPU_READ & cpu.address != word_address) | 
+			   (cpu.req = CPU_WRITE) | (state != IDLE)) & !prev_valid;
+		ignore_mem_ack := (bus.data = ACK) & ((bus.address = 0 & word_address = 0) | (bus.address = 1 & word_address = 1));
 
 	ASSIGN
 		init(state) := IDLE;
 		next(state) := case
-			state = IDLE & cpu.req = CPU_READ : L1_READ;
+			state = IDLE & cpu.req = CPU_READ & cpu.address != word_address : L1_READ;
 			state = IDLE & cpu.req = CPU_WRITE : L1_WRITE;
-			state != IDLE & prev_valid : IDLE;
+			state != IDLE & bus.valid : IDLE;
 			TRUE : state;
 		esac;
 		next(address) := case
@@ -144,10 +150,27 @@ MODULE cache_module(cpu, bus_out, valid, prev_valid)
 		esac;
 
 		rsp := case
-			valid & bus_out = 0 : 0;
-			valid & bus_out = 1 : 1;
-			valid & bus_out = ACK : ACK;
+			bus.valid & bus.data = 0 : 0;
+			bus.valid & bus.data = 1 : 1;
+			bus.valid & bus.data = ACK & !ignore_mem_ack : ACK;
+			state = IDLE & cpu.req = CPU_READ & cpu.address = word_address & word_data = 0 : 0;
+			state = IDLE & cpu.req = CPU_READ & cpu.address = word_address & word_data = 1 : 1;
+			state = IDLE & cpu.req = CPU_WRITE & cpu.address = word_address : ACK;
 			TRUE : NONE;
+		esac;
+
+		init(word_address) := NONE;
+		next(word_address) := case
+			bus.valid & state = L1_READ & address = 0 : 0;
+			bus.valid & state = L1_READ & address = 1 : 1;
+			TRUE : word_address;
+		esac;
+		init(word_data) := 0;
+		next(word_data) := case
+			bus.valid & state = L1_READ & rsp = 0 : 0;
+			bus.valid & state = L1_READ & rsp = 1 : 1;
+			cpu.req = CPU_WRITE & cpu.address = word_address : cpu.data;
+			TRUE : word_data;
 		esac;
 
 
@@ -160,7 +183,7 @@ MODULE main
 		cpu : cpu_module(L1.req, L1.rsp != NONE);
 		arbiter : arbiter_module(L1.req, bus.valid);
 		bus : bus_module(arbiter.gnt, L1, memory);
-		L1 : cache_module(cpu, bus.data, bus.valid, prev_valid);
+		L1 : cache_module(cpu, bus, prev_valid);
 
 	ASSIGN
 		init(prev_valid) := bus.valid;

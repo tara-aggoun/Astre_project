@@ -45,7 +45,7 @@ MODULE cpu_module(L1_req, L1_rsp)
 		data : {0, 1};
 
 	DEFINE
-		busy := (req = NONE & !stall) | L1_rsp;
+		busy := (req = NONE) | L1_rsp;
 
 	ASSIGN
 		init(req) := NONE;
@@ -131,7 +131,7 @@ MODULE cache_module(cpu, bus_out, valid, prev_valid)
 		next(state) := case
 			state = IDLE & cpu.req = CPU_READ : L1_READ;
 			state = IDLE & cpu.req = CPU_WRITE : L1_WRITE;
-			state != IDLE & prev_valid : IDLE;
+			state != IDLE & valid : IDLE;
 			TRUE : state;
 		esac;
 		next(address) := case
