@@ -37,7 +37,7 @@ MODULE memory_module(gnt_L1, bus)
 
 -- end of memory_module
 
-MODULE cpu_module(L1_req, L1_rsp)
+MODULE cpu_module(L1_rsp)
 	VAR
 		req: {NONE, CPU_READ, CPU_WRITE};
 		address : {0, 1};
@@ -69,13 +69,13 @@ MODULE cpu_module(L1_req, L1_rsp)
 
 MODULE arbiter_module(L1_req, valid)
 	VAR
-		gnt : {MEM, L1_1};
+		gnt : {MEM, 1};
 
 	ASSIGN
 		init(gnt) := MEM;
 		next(gnt) := case
-			gnt = MEM & L1_req & !valid : L1_1;
-			gnt = L1_1 : MEM;
+			gnt = MEM & L1_req & !valid : 1;
+			gnt = 1 : MEM;
 			TRUE : gnt;
 		esac;
 
@@ -93,16 +93,16 @@ MODULE bus_module(arb_gnt, L1, mem)
 	ASSIGN
 		data := case
 			arb_gnt = MEM : mem.out;
-			arb_gnt = L1_1 & L1.data = 0 : 0;
-			arb_gnt = L1_1 & L1.data = 1 : 1;
+			arb_gnt = 1 & L1.data = 0 : 0;
+			arb_gnt = 1 & L1.data = 1 : 1;
 		esac;
 		ctrl := case
-			arb_gnt = L1_1 & L1.state = L1_READ : BUS_READ;
-			arb_gnt = L1_1 & L1.state = L1_WRITE : BUS_WRITE;
+			arb_gnt = 1 & L1.state = L1_READ : BUS_READ;
+			arb_gnt = 1 & L1.state = L1_WRITE : BUS_WRITE;
 			TRUE : BUS_READ;
 		esac;
 		address := case
-			arb_gnt = L1_1 : L1.address;
+			arb_gnt = 1 : L1.address;
 			TRUE : 0;
 		esac;
 
@@ -148,8 +148,8 @@ MODULE cache_module(cpu, bus_out, valid, prev_valid)
 MODULE main
 	VAR
 		prev_valid: boolean;
-		memory : memory_module(arbiter.gnt = L1_1, bus);
-		cpu : cpu_module(L1.req, L1.rsp != NONE);
+		memory : memory_module(arbiter.gnt = 1, bus);
+		cpu : cpu_module(L1.rsp != NONE);
 		arbiter : arbiter_module(L1.req, bus.valid);
 		bus : bus_module(arbiter.gnt, L1, memory);
 		L1 : cache_module(cpu, bus.data, bus.valid, prev_valid);
@@ -160,7 +160,7 @@ MODULE main
 
 
 SPEC AG ((cpu.req != NONE) -> AF(L1.req & AF(bus.valid & L1.rsp != NONE)))
-SPEC AG ((cpu.req != NONE & !cpu.busy) -> AF(arbiter.gnt = L1_1))
+SPEC AG ((cpu.req != NONE & !cpu.busy) -> AF(arbiter.gnt = 1))
 SPEC AG ((cpu.req != NONE & prev_valid) -> (!L1.req & AX(L1.req & AF(!L1.req))))
 
 SPEC AG ((cpu.req = CPU_READ & cpu.address = 0) -> AF(memory.out = memory.data[0] & AF(L1.rsp = memory.data[0])))
@@ -174,6 +174,6 @@ SPEC AG ((cpu.req = CPU_WRITE & cpu.address = 0 & cpu.data = 1) -> AX(AF((cpu.re
 SPEC AG (bus.valid -> (L1.req & AX(!L1.req)))
 
 SPEC AG (AX(arbiter.gnt != MEM) -> (arbiter.gnt = MEM & AX(AX(arbiter.gnt = MEM))))
-SPEC AG ((arbiter.gnt = L1_1) -> (L1.address = bus.address & (L1.data = 1 -> bus.data = 1) & (L1.data = 0 -> bus.data = 0) 
+SPEC AG ((arbiter.gnt = 1) -> (L1.address = bus.address & (L1.data = 1 -> bus.data = 1) & (L1.data = 0 -> bus.data = 0) 
 								  & (L1.state = L1_READ -> bus.ctrl = BUS_READ) & (L1.state = L1_WRITE -> bus.ctrl = BUS_WRITE)))
 SPEC AG ((arbiter.gnt = MEM & memory.valid) -> (bus.valid & (memory.out = bus.data)))
