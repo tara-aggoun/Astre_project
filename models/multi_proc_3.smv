@@ -226,3 +226,42 @@ MODULE main
 	ASSIGN
 		init(prev_valid) := bus.valid;
 		next(prev_valid) := bus.valid;
+
+
+SPEC AG ((cpu_1.req != NONE) -> EF(L1_1.req & AF(bus.valid & L1_1.rsp != NONE)))
+SPEC AG ((cpu_1.req != NONE & !cpu_1.busy) -> EF(arbiter.gnt = 1))
+SPEC AG ((cpu_1.req != NONE & prev_valid) -> (EX(L1_1.req & AF(!L1_1.req))))
+
+SPEC AG ((cpu_1.req = CPU_READ & cpu_1.address = 0) -> EF(memory.out = memory.data[0] & AF(L1_1.rsp = memory.data[0])))
+SPEC AG ((cpu_1.req = CPU_READ & cpu_1.address = 0) -> EF(L1_1.state = L1_READ & L1_1.address = 0))
+
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address = 0 & cpu_1.data = 1) -> AF(memory.data[0] = 1))
+SPEC AG ((cpu_1.req = CPU_WRITE) -> AF(memory.out = ACK & EF(L1_1.rsp = ACK)))
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address = 0 & cpu_1.data = 0) -> AF(L1_1.state = L1_WRITE & L1_1.address = 0 & L1_1.data = 0))
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address = 0 & cpu_1.data = 1) -> AF((cpu_1.req = CPU_READ & cpu_1.address = 0) -> AF(L1_1.rsp = 1)))
+
+SPEC AG (AX(!arbiter.is_mem) -> (arbiter.is_mem & AX(AX(arbiter.is_mem))))
+SPEC AG ((arbiter.gnt = 1) -> (L1_1.address = bus.address & (L1_1.data = 1 -> bus.data = 1) & (L1_1.data = 0 -> bus.data = 0) 
+ 								  & (L1_1.state = L1_READ -> bus.ctrl = BUS_READ) & (L1_1.state = L1_WRITE -> bus.ctrl = BUS_WRITE)))
+SPEC AG ((arbiter.is_mem & memory.valid) -> (bus.valid & (memory.out = bus.data)))
+
+-- Cache memory spec
+
+SPEC AG ((cpu_1.req = CPU_READ & cpu_1.address = 0) -> AF(L1_1.word_address = 0))
+SPEC AG ((cpu_1.req = CPU_READ & cpu_1.address = L1_1.word_address & !L1_1.req) -> (L1_1.rsp = L1_1.word_data))
+
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address = L1_1.word_address & cpu_1.data = 1 & !L1_1.req) -> (L1_1.rsp = ACK & AF(L1_1.word_data = 1 & L1_1.req)))
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address != L1_1.word_address & !cpu_1.busy) -> AF(L1_1.state = L1_WRITE & AF(arbiter.gnt = 1 & AF(bus.valid & L1_1.rsp = ACK))))
+
+SPEC AG ((cpu_1.req = CPU_WRITE & cpu_1.address = 0 & L1_1.word_address = 0 & cpu_1.data = 1 & !L1_1.req) ->
+         (cpu_1.busy & AX((cpu_1.req = CPU_WRITE & cpu_1.address = 0 & cpu_1.data = 0) -> (!cpu_1.busy & AF(memory.data[0] = 1 & AF(memory.data[0] = 0))))))
+SPEC AG ((cpu_2.req = CPU_WRITE & cpu_2.address = 0 & L1_2.word_address = 0 & cpu_2.data = 1 & !L1_2.req) ->
+         (cpu_2.busy & AX((cpu_2.req = CPU_READ & cpu_2.address = 0) -> (!cpu_2.busy & L1_2.rsp = NONE & AF(L1_2.rsp = 1)))))
+
+-- Fairness
+SPEC AG (AG AF(AX (L1_1.req) & !L1_1.req & AX(L1_2.req) & !L1_2.req & AX(L1_3.req) & !L1_3.req) -> 
+		(AG AF(L1_1.rsp != NONE) & AG AF(L1_2.rsp != NONE) & AG AF(L1_3.rsp != NONE)))
+
+-- SNOOP
+SPEC AG ((bus.ctrl = BUS_WRITE & cpu_1.req != CPU_WRITE & bus.address = L1_1.word_address & bus.data = 1) -> AX (L1_1.word_data = 1))
+
