@@ -9,6 +9,8 @@ Studies of different programs execution with bus / L1 cache / CPU / Memory / Arb
 The current models are:
 - mono_proc_simple.smv: architecture with 1 cache / cpu, without memorization, the cache only forward the cpu requests.
 - mono_proc_mem.smv: same architecture as before, but with memorization in the L1 cache.
+- multi_proc_2.smv: architecture with 2 caches / cpus (about 20 min to verify all the specs).
+- multi_proc_3.smv: architecture with 3 caches / cpus (after more than 10 hours, 0 spec verified... ;-;).
 
 ### Testing the models
 
@@ -17,6 +19,8 @@ Running the specifications:
 ```bash
 nusmv models/mono_proc_simple.smv # mono processor without memorization
 nusmv models/mono_proc_mem.smv # mono processor with memorization
+nusmv models/multi_proc_2.smv # multi processors with 2 processor
+nusmv models/mono_proc_3.smv # multi processors with 3 processor
 ```
 
 #### Interactive mode
